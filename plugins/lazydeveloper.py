@@ -250,13 +250,12 @@ async def rename(client, message):
                              'Type: `y` (If Yes)\nType: `n` (If No)'
                     )
 
-                    if await is_cancel(msg, confirm.text):  # If user wants to cancel
-                        return
-
                     if "n" in confirm.text.lower():  # If user wants to stop
                         await confirm.delete()
+                        file_count = 0
                         break  # Stop forwarding
                     await confirm.delete()
+                    file_count = 0
 
         except Exception as e:
             print(f"Error processing message {msg.id}: {e}")
