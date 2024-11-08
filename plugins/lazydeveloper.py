@@ -194,6 +194,8 @@ async def rename(client, message):
 
     # Using `ubot` to iterate through chat history in target chat
     async for msg in ubot.get_chat_history(target_chat_id):
+        if await is_cancel(msg, msg.text):
+            return
         try:
             # Check if message has any file type (document, audio, video, etc.)
             if msg.document or msg.audio or msg.video:
