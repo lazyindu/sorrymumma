@@ -32,19 +32,29 @@ PHONE_NUMBER_TEXT = (
 
 
 @Client.on_message(filters.private & filters.command("connect"))
-async def generate_str(client, message):
-    c = client
-    m = message
+async def generate_str(c, m):
 
     user_id = m.from_user.id
+
     # Check if the user is allowed to use the bot
     if not await verify_user(user_id):
         return await m.reply("⛔ You are not authorized to use this bot.")
     
-    if message.from_user.id in St_Session:
+    if user_id in St_Session:
         # Check if session already exists for this user
         return await m.reply("String session already connected! Use /rename")
     
+    try:
+        client = Client(":memory:", api_id=API_ID, api_hash=API_HASH)
+    except Exception as e:
+        return await c.send_message(m.chat.id ,f"**🛑 ERROR: 🛑** {str(e)}\nPress /login to create again.")
+
+    try:
+        await client.connect()
+    except ConnectionError:
+        await client.disconnect()
+        await client.connect()
+
     while True:
         get_phone_number = await c.ask(
             chat_id=m.chat.id,
@@ -58,7 +68,7 @@ async def generate_str(client, message):
 
         confirm = await c.ask(
             chat_id=m.chat.id,
-            text=f'🤔 Is `{phone_number}` correct? (y/n): \n\ntype: `y` (If Yes)\ntype: `n` (If No)'
+            text=f'🤔 Is {phone_number} correct? (y/n): \n\ntype: y (If Yes)\ntype: n (If No)'
         )
         if await is_cancel(m, confirm.text):
             return
@@ -74,14 +84,18 @@ async def generate_str(client, message):
     except ApiIdInvalid:
         return await m.reply("🕵‍♂ The API ID or API HASH is Invalid.\n\nPress /login to create again.")
     except PhoneNumberInvalid:
-        return await m.reply("☎ Your Phone Number is Invalid.`\n\nPress /login to create again.")
+        return await m.reply("☎ Your Phone Number is Invalid.\n\nPress /login to create again.")
 
     try:
-
+        # sent_type = {"app": "Telegram App 💌",
+        #     "sms": "SMS 💬",
+        #     "call": "Phone call 📱",
+        #     "flash_call": "phone flash call 📲"
+        # }[code.type]
         otp = await c.ask(
             chat_id=m.chat.id,
-            text=(f"I had sent an OTP to the number `{phone_number}`\n\n"
-                  "Please enter the OTP in the format `1 2 3 4 5` __(provied white space between numbers)__\n\n"
+            text=(f"I had sent an OTP to the number {phone_number} through\n\n"
+                  "Please enter the OTP in the format 1 2 3 4 5 __(provied white space between numbers)__\n\n"
                   "If Bot not sending OTP then try /start the Bot.\n"
                   "Press /cancel to Cancel."), timeout=300)
     except TimeoutError:
@@ -101,7 +115,7 @@ async def generate_str(client, message):
         try:
             two_step_code = await c.ask(
                 chat_id=m.chat.id, 
-                text="`🔐 This account have two-step verification code.\nPlease enter your second factor authentication code.`\nPress /cancel to Cancel.",
+                text="🔐 This account have two-step verification code.\nPlease enter your second factor authentication code.\nPress /cancel to Cancel.",
                 timeout=300
             )
         except TimeoutError:
@@ -114,25 +128,24 @@ async def generate_str(client, message):
         try:
             await client.check_password(new_code)
         except Exception as e:
-            return await m.reply(f"**⚠️ ERROR:** `{str(e)}`")
+            return await m.reply(f"**⚠️ ERROR:** {str(e)}")
     except Exception as e:
-        return await c.send_message(m.chat.id ,f"**⚠️ ERROR:** `{str(e)}`")
+        return await c.send_message(m.chat.id ,f"**⚠️ ERROR:** {str(e)}")
     try:
         session_string = await client.export_session_string()
         St_Session[m.from_user.id] = session_string 
-        await client.send_message("me", f"**Your String Session 👇**\n\n`{session_string}`\n\nThanks For using {(await c.get_me()).mention(style='md')}")
+        await client.send_message("me", f"**Your String Session 👇**\n\n{session_string}\n\nThanks For using {(await c.get_me()).mention(style='md')}")
         text = "✅ Successfully Generated Your String Session and sent to you saved messages.\nCheck your saved messages or Click on Below Button."
         reply_markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton(text="String Session ↗️", url=f"tg://openmessage?user_id={m.chat.id}")]]
         )
         await c.send_message(m.chat.id, text, reply_markup=reply_markup)
     except Exception as e:
-        return await c.send_message(m.chat.id ,f"**⚠️ ERROR:** `{str(e)}`")
+        return await c.send_message(m.chat.id ,f"**⚠️ ERROR:** {str(e)}")
     try:
         await client.stop()
     except:
         pass
-
 
 @Client.on_message(filters.private & filters.command("logout"))
 async def logout_user(c, m):
