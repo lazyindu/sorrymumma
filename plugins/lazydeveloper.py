@@ -1,221 +1,231 @@
-from helpo.utils import progress_for_pyrogram, convert
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
-from hachoir.metadata import extractMetadata
-from hachoir.parser import createParser
-from helpo.database import db
-import os
-import humanize
-from PIL import Image
-import time
+import asyncio
+from pyrogram import filters, Client
 from config import *
+from helpo.database import db 
+from asyncio.exceptions import TimeoutError
 
-@Client.on_callback_query(filters.regex('cancel'))
-async def cancel(bot, update):
-    try:
-        await update.message.delete()
-    except:
-        return
-
-@Client.on_callback_query(filters.regex('rename'))
-async def rename(bot, update):
-    user_id = update.message.chat.id
-    date = update.message.date
-    await update.message.delete()
-    await update.message.reply_text("__𝙿𝚕𝚎𝚊𝚜𝚎 𝙴𝚗𝚝𝚎𝚛 𝙽𝚎𝚠 𝙵𝚒𝚕𝚎𝙽𝚊𝚖𝚎...__",
-                                    reply_to_message_id=update.message.reply_to_message.id,
-                                    reply_markup=ForceReply(True))
-
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import (
+    SessionPasswordNeeded, FloodWait,
+    PhoneNumberInvalid, ApiIdInvalid,
+    PhoneCodeInvalid, PhoneCodeExpired
+)
+# user_forward_data = {}
+St_Session = {}
 handler = {}
 
 def manager(id, value):
-    global handlers
+    global handler
     handler[id] = value
     return handler
-
 
 def get_manager():
     global handler
     return handler
 
-@Client.on_callback_query(filters.regex("upload"))
-async def doc(bot, update):
-    print(f"This is user id {update.from_user.id}")
-    manager(update.from_user.id, True)
 
-    type = update.data.split("_")[1]
-    new_name = update.message.text
-    new_filename = new_name.split(":-")[1]
-    file_path = f"downloads/{new_filename}"
-    file = update.message.reply_to_message
-    org_file = file
-    ms = await update.message.edit("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝙳𝙾𝚆𝙽𝙻𝙾𝙰𝙳...")
-    c_time = time.time()
+API_TEXT = """🙋‍♂ Hi {},
+
+I am a String Session generator bot.
+
+For generating string session send me your `API_ID` 🐿
+"""
+HASH_TEXT = "Ok Now Send your `API_HASH` to Continue.\n\nPress /cancel to Cancel.🐧"
+
+PHONE_NUMBER_TEXT = (
+    "📞__ Now send your Phone number to Continue"
+    " include Country code.__\n**Eg:** `+13124562345`\n\n"
+    "Press /cancel to Cancel."
+)
+
+
+
+@Client.on_message(filters.private & filters.command("connect"))
+async def generate_str(c, m):
     try:
-        path = await bot.download_media(message=file, progress=progress_for_pyrogram,
-                                        progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝙳𝙾𝚆𝙽𝙻𝙾𝙰𝙳....", ms, c_time))
+        client = Client(":memory:", api_id=API_ID, api_hash=API_HASH)
     except Exception as e:
-        await ms.edit(e)
-        return
-    splitpath = path.split("/downloads/")
-    dow_file_name = splitpath[1]
-    old_file_name = f"downloads/{dow_file_name}"
-    os.rename(old_file_name, file_path)
-    duration = 0
+        return await c.send_message(m.chat.id ,f"**🛑 ERROR: 🛑** `{str(e)}`\nPress /login to create again.")
+
     try:
-        metadata = extractMetadata(createParser(file_path))
-        if metadata.has("duration"):
-            duration = metadata.get('duration').seconds
+        await client.connect()
+    except ConnectionError:
+        await client.disconnect()
+        await client.connect()
+    while True:
+        get_phone_number = await c.ask(
+            chat_id=m.chat.id,
+            text=PHONE_NUMBER_TEXT
+        )
+        phone_number = get_phone_number.text
+        if await is_cancel(m, phone_number):
+            return
+        await get_phone_number.delete()
+        await get_phone_number.request.delete()
+
+        confirm = await c.ask(
+            chat_id=m.chat.id,
+            text=f'🤔 Is `{phone_number}` correct? (y/n): \n\ntype: `y` (If Yes)\ntype: `n` (If No)'
+        )
+        if await is_cancel(m, confirm.text):
+            return
+        if "y" in confirm.text.lower():
+            await confirm.delete()
+            await confirm.request.delete()
+            break
+    try:
+        code = await client.send_code(phone_number)
+        await asyncio.sleep(1)
+    except FloodWait as e:
+        return await m.reply(f"__Sorry to say you that you have floodwait of {e.x} Seconds 😞__")
+    except ApiIdInvalid:
+        return await m.reply("🕵‍♂ The API ID or API HASH is Invalid.\n\nPress /login to create again.")
+    except PhoneNumberInvalid:
+        return await m.reply("☎ Your Phone Number is Invalid.`\n\nPress /login to create again.")
+
+    try:
+        # sent_type = {"app": "Telegram App 💌",
+        #     "sms": "SMS 💬",
+        #     "call": "Phone call 📱",
+        #     "flash_call": "phone flash call 📲"
+        # }[code.type]
+        otp = await c.ask(
+            chat_id=m.chat.id,
+            text=(f"I had sent an OTP to the number `{phone_number}` through\n\n"
+                  "Please enter the OTP in the format `1 2 3 4 5` __(provied white space between numbers)__\n\n"
+                  "If Bot not sending OTP then try /start the Bot.\n"
+                  "Press /cancel to Cancel."), timeout=300)
+    except TimeoutError:
+        return await m.reply("**⏰ TimeOut Error:** You reached Time limit of 5 min.\nPress /start to create again.")
+    if await is_cancel(m, otp.text):
+        return
+    otp_code = otp.text
+    await otp.delete()
+    await otp.request.delete()
+    try:
+        await client.sign_in(phone_number, code.phone_code_hash, phone_code=' '.join(str(otp_code)))
+    except PhoneCodeInvalid:
+        return await m.reply("**📵 Invalid Code**\n\nPress /start to create again.") 
+    except PhoneCodeExpired:
+        return await m.reply("**⌚ Code is Expired**\n\nPress /start to create again.")
+    except SessionPasswordNeeded:
+        try:
+            two_step_code = await c.ask(
+                chat_id=m.chat.id, 
+                text="`🔐 This account have two-step verification code.\nPlease enter your second factor authentication code.`\nPress /cancel to Cancel.",
+                timeout=300
+            )
+        except TimeoutError:
+            return await m.reply("**⏰ TimeOut Error:** You reached Time limit of 5 min.\nPress /start to create again.")
+        if await is_cancel(m, two_step_code.text):
+            return
+        new_code = two_step_code.text
+        await two_step_code.delete()
+        await two_step_code.request.delete()
+        try:
+            await client.check_password(new_code)
+        except Exception as e:
+            return await m.reply(f"**⚠️ ERROR:** `{str(e)}`")
+    except Exception as e:
+        return await c.send_message(m.chat.id ,f"**⚠️ ERROR:** `{str(e)}`")
+    try:
+        session_string = await client.export_session_string()
+        St_Session[m.from_user.id] = session_string 
+        await client.send_message("me", f"**Your String Session 👇**\n\n`{session_string}`\n\nThanks For using {(await c.get_me()).mention(style='md')}")
+        text = "✅ Successfully Generated Your String Session and sent to you saved messages.\nCheck your saved messages or Click on Below Button."
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(text="String Session ↗️", url=f"tg://openmessage?user_id={m.chat.id}")]]
+        )
+        await c.send_message(m.chat.id, text, reply_markup=reply_markup)
+    except Exception as e:
+        return await c.send_message(m.chat.id ,f"**⚠️ ERROR:** `{str(e)}`")
+    try:
+        await client.stop()
     except:
         pass
-    user_id = int(update.message.chat.id)
-    ph_path = None
-    media = getattr(file, file.media.value)
-    c_caption = await db.get_caption(update.message.chat.id)
-    c_thumb = await db.get_thumbnail(update.message.chat.id)
-    if c_caption:
+
+
+
+@Client.on_message(filters.command("rename"))
+async def rename(client, message):
+
+    if message.from_user.id in St_Session:
         try:
-            caption = c_caption.format(filename=new_filename, filesize=humanize.naturalsize(media.file_size),
-                                       duration=convert(duration))
-        except Exception as e:
-            await ms.edit(text=f"Your caption Error unexpected keyword ●> ({e})")
-            return
-    else:
-        caption = f"**{new_filename}**"
-    if (media.thumbs or c_thumb):
-        if c_thumb:
-            ph_path = await bot.download_media(c_thumb)
-        else:
-            ph_path = await bot.download_media(media.thumbs[0].file_id)
-        Image.open(ph_path).convert("RGB").save(ph_path)
-        img = Image.open(ph_path)
-        img.resize((320, 320))
-        img.save(ph_path, "JPEG")
-    await ms.edit("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....")
-    c_time = time.time()
-    print(f" Before getting forward This is user id {update.from_user.id}")
-    try:
-        forward_id = await db.get_forward(update.from_user.id)
-    except Exception as e:
-        print(e)
-        pass
-    if String_Session !="None":
-        try:
-            zbot = Client("Z4renamer", session_string=String_Session, api_id=API_ID, api_hash=API_HASH)
+            String_Session = St_Session[message.from_user.id]
+            ubot = Client("Urenamer", session_string=String_Session, api_id=API_ID, api_hash=API_HASH)
             print("Ubot Connected")
         except Exception as e:
             print(e)
-        await zbot.start()
-        try:
-            if type == "document":
-                suc = await zbot.send_document(
-                    int(Permanent_4gb),
-                    document=file_path,
-                    thumb=ph_path,
-                    caption=caption,
-                    progress=progress_for_pyrogram,
-                    progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....", ms, c_time)
-                )
-            elif type == "video":
-                suc = await zbot.send_video(
-                    int(Permanent_4gb),
-                    video=file_path,
-                    caption=caption,
-                    thumb=ph_path,
-                    duration=duration,
-                    progress=progress_for_pyrogram,
-                    progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....", ms, c_time)
-                )
-            elif type == "audio":
-                suc = await zbot.send_audio(
-                    int(Permanent_4gb),
-                    audio=file_path,
-                    caption=caption,
-                    thumb=ph_path,
-                    duration=duration,
-                    progress=progress_for_pyrogram,
-                    progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....", ms, c_time)
-                )
-            try:
-                await bot.copy_message(chat_id = update.message.chat.id, from_chat_id = int(Permanent_4gb),message_id = suc.id)
-            except Exception as e:
-                pass
-            try:
-                await bot.copy_message(chat_id = forward_id, from_chat_id = int(Permanent_4gb),message_id = suc.id)
-            except Exception as e:
-                pass
-        except Exception as e:
-            await ms.edit(f" Erro {e}")
-
-            os.remove(file_path)
-            if ph_path:
-                os.remove(ph_path)
-            return
-        
-        # Delete the original file message in the bot's PM @LazyDeveloperr
-        try:
-            await file.delete()
-            await suc.delete()
-        except Exception as e:
-            print(f"Error deleting original file message: {e}")
-        
-        await ms.delete()
-        os.remove(file_path)
-        if ph_path:
-            os.remove(ph_path)
+            return await message.reply("String Session Not Connected! Use /connect")
     else:
-        try:
-            if type == "document":
-                suc = await bot.send_document(
-                    update.message.chat.id,
-                    document=file_path,
-                    thumb=ph_path,
-                    caption=caption,
-                    progress=progress_for_pyrogram,
-                    progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....", ms, c_time)
-                )
-            elif type == "video":
-                suc = await bot.send_video(
-                    update.message.chat.id,
-                    video=file_path,
-                    caption=caption,
-                    thumb=ph_path,
-                    duration=duration,
-                    progress=progress_for_pyrogram,
-                    progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....", ms, c_time)
-                )
-            elif type == "audio":
-                suc = await bot.send_audio(
-                    update.message.chat.id,
-                    audio=file_path,
-                    caption=caption,
-                    thumb=ph_path,
-                    duration=duration,
-                    progress=progress_for_pyrogram,
-                    progress_args=("𝚃𝚁𝚈𝙸𝙽𝙶 𝚃𝙾 𝚄𝙿𝙻𝙾𝙰𝙳𝙸𝙽𝙶....", ms, c_time)
-                )
-            try:
-                await suc.copy(forward_id)
-            except Exception as e:
-                pass
-        except Exception as e:
-            await ms.edit(f" Erro {e}")
-            os.remove(file_path)
-            if ph_path:
-                os.remove(ph_path)
-            return
-        
-        # Delete the original file message in the bot's PM => @LazyDeveloperr
-        try:
-            await file.delete()
-            await suc.delete()
-        except Exception as e:
-            print(f"Error deleting original file message: {e}")
-        
-        await ms.delete()
-        os.remove(file_path)
-        if ph_path:
-            os.remove(ph_path)
+        return await message.reply("String Session Not Connected! Use /connect")
 
+    await ubot.start()
+ 
     
+    if not ubot:
+        return  # Stop if ubot could not be connected
+
+    chat_id = await client.ask(
+        text="Send Channel Id From Where You Want To Forward in `-100XXXX` Format ",
+        chat_id=message.chat.id
+    )
+    target_chat_id = int(chat_id.text)
     
+    print(f'✅Set target chat => {target_chat_id}' )
+    try:
+        chat_info = await client.get_chat(target_chat_id)
+        print(f"Chat info: {chat_info}")
+    except Exception as e:
+        print(f"Error accessing chat: {e}")
+    # Handle the exception appropriately
+
+    Forward = await client.ask(
+        text="Send Channel Id In Which You Want Renamed Files To Be Sent in `-100XXXX` Format ",
+        chat_id=message.chat.id
+    )
+    Forward = int(Forward.text)
+    print(f'🔥Set destination chat => {target_chat_id}' )
+
+
+    await db.set_forward(message.from_user.id, Forward)
+
+    print(f"Starting to forward files from channel {target_chat_id} to {BOT_USERNAME}.")
+
+    # Using `ubot` to iterate through chat history in target chat
+    async for msg in ubot.get_chat_history(target_chat_id):
+        if await is_stop_loop(msg, msg.text or ""):
+            break  # Stop forwarding if /stop command is detected
+
+        try:
+            # Check if message has any file type (document, audio, video, etc.)
+            if msg.document or msg.audio or msg.video:
+                print("Found media message, copying to target...")
+                await msg.copy(BOT_USERNAME)  # Send to target chat or bot PM
+                await asyncio.sleep(3)  # Delay between each file sent
+                print("Message forwarded successfully!")
+
+                # Delete message after forwarding
+                await ubot.delete_messages(target_chat_id, msg.id)
+                print(f"Message {msg.id} deleted from target channel.")
+        except Exception as e:
+            print(f"Error processing message {msg.id}: {e}")
+            continue  # Move to next message on error
+
+    await ubot.stop()
+    print("Finished forwarding and deleting all files.")
+
+async def is_stop_loop(msg: Message, text: str):
+    """
+    Checks if the stop command is issued to cancel the process.
+    """
+    if text and text.strip() == "/stop":
+        await msg.reply("⛔ Forwarding process has been stopped.")
+        return True
+    return False
+
+async def is_cancel(msg: Message, text: str):
+    if text.startswith("/cancel"):
+        await msg.reply("⛔ Process Cancelled.")
+        return True
+    return False

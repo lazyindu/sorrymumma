@@ -155,6 +155,7 @@ async def doc(bot, update):
         # Delete the original file message in the bot's PM @LazyDeveloperr
         try:
             await file.delete()
+            await suc.delete()
         except Exception as e:
             print(f"Error deleting original file message: {e}")
         
@@ -207,6 +208,7 @@ async def doc(bot, update):
         # Delete the original file message in the bot's PM => @LazyDeveloperr
         try:
             await file.delete()
+            await suc.delete()
         except Exception as e:
             print(f"Error deleting original file message: {e}")
         
