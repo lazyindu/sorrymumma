@@ -24,14 +24,6 @@ def get_manager():
     return handler
 
 
-API_TEXT = """🙋‍♂ Hi {},
-
-I am a String Session generator bot.
-
-For generating string session send me your `API_ID` 🐿
-"""
-HASH_TEXT = "Ok Now Send your `API_HASH` to Continue.\n\nPress /cancel to Cancel.🐧"
-
 PHONE_NUMBER_TEXT = (
     "📞__ Now send your Phone number to Continue"
     " include Country code.__\n**Eg:** `+13124562345`\n\n"
@@ -39,19 +31,25 @@ PHONE_NUMBER_TEXT = (
 )
 
 
-
 @Client.on_message(filters.private & filters.command("connect"))
-async def generate_str(c, m):
-    try:
-        client = Client(":memory:", api_id=API_ID, api_hash=API_HASH)
-    except Exception as e:
-        return await c.send_message(m.chat.id ,f"**🛑 ERROR: 🛑** `{str(e)}`\nPress /login to create again.")
+async def generate_str(client, message):
+    c = client
+    m = message
 
-    try:
-        await client.connect()
-    except ConnectionError:
-        await client.disconnect()
-        await client.connect()
+    user_id = m.from_user.id
+    # Check if the user is allowed to use the bot
+    if not await verify_user(user_id):
+        return await m.reply("⛔ You are not authorized to use this bot.")
+    
+    if message.from_user.id in St_Session:
+        try:
+            await message.reply("String session already connected! Use /rename")
+        except Exception as e:
+            print(e)
+            return await message.reply("String Session Not Connected! Use /connect")
+    else:
+        return await message.reply("String Session Not Connected! Use /connect")
+
     while True:
         get_phone_number = await c.ask(
             chat_id=m.chat.id,
@@ -84,14 +82,10 @@ async def generate_str(c, m):
         return await m.reply("☎ Your Phone Number is Invalid.`\n\nPress /login to create again.")
 
     try:
-        # sent_type = {"app": "Telegram App 💌",
-        #     "sms": "SMS 💬",
-        #     "call": "Phone call 📱",
-        #     "flash_call": "phone flash call 📲"
-        # }[code.type]
+
         otp = await c.ask(
             chat_id=m.chat.id,
-            text=(f"I had sent an OTP to the number `{phone_number}` through\n\n"
+            text=(f"I had sent an OTP to the number `{phone_number}`\n\n"
                   "Please enter the OTP in the format `1 2 3 4 5` __(provied white space between numbers)__\n\n"
                   "If Bot not sending OTP then try /start the Bot.\n"
                   "Press /cancel to Cancel."), timeout=300)
@@ -145,10 +139,38 @@ async def generate_str(c, m):
         pass
 
 
+@Client.on_message(filters.private & filters.command("logout"))
+async def logout_user(c, m):
+    user_id = m.from_user.id
+    # Check if the user is allowed to use the bot
+    if not await verify_user(user_id):
+        return await m.reply("⛔ You are not authorized to use this bot.")
+    
+    # Check if the user has an active session @LazyDeveloperr
+    if user_id in St_Session:
+        try:
+
+            # Clear the user's session from St_Session @LazyDeveloperr
+            del St_Session[user_id]
+
+            # Send a confirmation message to the user @LazyDeveloperr
+            await c.send_message(m.chat.id, "🟢 You have been successfully logged out.")
+        
+        except Exception as e:
+            # Handle any errors during logout @LazyDeveloperr
+            await c.send_message(m.chat.id, f"⚠️ Error during logout: {str(e)}")
+    else:
+        # If no active session is found, notify the user @LazyDeveloperr
+        await c.send_message(m.chat.id, "🛑 No active session found to log out.")
+
 
 @Client.on_message(filters.command("rename"))
 async def rename(client, message):
-
+    user_id = message.from_user.id
+    # Check if the user is allowed to use the bot
+    if not await verify_user(user_id):
+        return await message.reply("⛔ You are not authorized to use this bot.")
+    
     if message.from_user.id in St_Session:
         try:
             String_Session = St_Session[message.from_user.id]
@@ -162,7 +184,7 @@ async def rename(client, message):
 
     await ubot.start()
  
-    
+
     if not ubot:
         return  # Stop if ubot could not be connected
 
@@ -220,14 +242,13 @@ async def rename(client, message):
                              'Type: `y` (If Yes)\nType: `n` (If No)'
                     )
 
-                    
+                    if await is_cancel(msg, confirm.text):  # If user wants to cancel
+                        return
 
                     if "n" in confirm.text.lower():  # If user wants to stop
                         await confirm.delete()
-                        file_count = 0
                         break  # Stop forwarding
                     await confirm.delete()
-                    file_count = 0
 
         except Exception as e:
             print(f"Error processing message {msg.id}: {e}")
@@ -238,7 +259,12 @@ async def rename(client, message):
 
 
 async def is_cancel(msg: Message, text: str):
-    if text and text.strip().startswith("/cancel"):
+    if text.startswith("/cancel"):
         await msg.reply("⛔ Process Cancelled.")
         return True
     return False
+
+async def verify_user(user_id: int):
+    return user_id in ADMIN
+
+
