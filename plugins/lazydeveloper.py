@@ -42,12 +42,9 @@ async def generate_str(client, message):
         return await m.reply("⛔ You are not authorized to use this bot.")
     
     if message.from_user.id in St_Session:
-        try:
-            await message.reply("String session already connected! Use /rename")
-        except Exception as lazyerror:
-            print(lazyerror)
-            return await message.reply(f"💔Something went wrong dear : {lazyerror}")
-
+        # Check if session already exists for this user
+        return await m.reply("String session already connected! Use /rename")
+    
     while True:
         get_phone_number = await c.ask(
             chat_id=m.chat.id,
