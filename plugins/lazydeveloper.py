@@ -44,11 +44,9 @@ async def generate_str(client, message):
     if message.from_user.id in St_Session:
         try:
             await message.reply("String session already connected! Use /rename")
-        except Exception as e:
-            print(e)
-            return await message.reply("String Session Not Connected! Use /connect")
-    else:
-        return await message.reply("String Session Not Connected! Use /connect")
+        except Exception as lazyerror:
+            print(lazyerror)
+            return await message.reply(f"💔Something went wrong dear : {lazyerror}")
 
     while True:
         get_phone_number = await c.ask(
