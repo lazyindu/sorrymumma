@@ -193,9 +193,11 @@ async def rename(client, message):
     print(f"Starting to forward files from channel {target_chat_id} to {BOT_USERNAME}.")
 
     # Using `ubot` to iterate through chat history in target chat
+    file_count = 0
+    
     async for msg in ubot.get_chat_history(target_chat_id):
-        if await is_stop_loop(msg, msg.text or ""):
-            break  # Stop forwarding if /stop command is detected
+        if await is_cancel(msg, msg.text):  # Check if /cancel is triggered
+            break  # Stop forwarding if /cancel command is detected
 
         try:
             # Check if message has any file type (document, audio, video, etc.)
@@ -208,6 +210,24 @@ async def rename(client, message):
                 # Delete message after forwarding
                 await ubot.delete_messages(target_chat_id, msg.id)
                 print(f"Message {msg.id} deleted from target channel.")
+                
+                file_count += 1  # Increment the file_count
+
+                if file_count == 10:
+                    confirm = await client.ask(
+                        chat_id=message.chat.id,
+                        text=f'Completed 10 tasks! Do you want to continue forwarding? (y/n):\n\n'
+                             'Type: `y` (If Yes)\nType: `n` (If No)'
+                    )
+
+                    if await is_cancel(msg, confirm.text):  # If user wants to cancel
+                        return
+
+                    if "n" in confirm.text.lower():  # If user wants to stop
+                        await confirm.delete()
+                        break  # Stop forwarding
+                    await confirm.delete()
+
         except Exception as e:
             print(f"Error processing message {msg.id}: {e}")
             continue  # Move to next message on error
@@ -215,17 +235,8 @@ async def rename(client, message):
     await ubot.stop()
     print("Finished forwarding and deleting all files.")
 
-async def is_stop_loop(msg: Message, text: str):
-    """
-    Checks if the stop command is issued to cancel the process.
-    """
-    if text and text.strip() == "/stop":
-        await msg.reply("⛔ Forwarding process has been stopped.")
-        return True
-    return False
-
 async def is_cancel(msg: Message, text: str):
-    if text.startswith("/cancel"):
+    if text and text.strip().startswith("/cancel"):
         await msg.reply("⛔ Process Cancelled.")
         return True
     return False
