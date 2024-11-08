@@ -205,8 +205,9 @@ async def rename(client, message):
     print(f'✅Set target chat => {target_chat_id}' )
     try:
         chat_info = await client.get_chat(target_chat_id)
-        print(f"Chat info: {chat_info}")
+        print(f"Got Chat info")
     except Exception as e:
+        await client.send_message(message.chat.id, f"Something went wrong while accessing chat : {chat_info}")
         print(f"Error accessing chat: {e}")
     # Handle the exception appropriately
 
@@ -226,9 +227,6 @@ async def rename(client, message):
     file_count = 0
     
     async for msg in ubot.get_chat_history(target_chat_id):
-        if await is_cancel(msg, msg.text):  # Check if /cancel is triggered
-            break  # Stop forwarding if /cancel command is detected
-
         try:
             # Check if message has any file type (document, audio, video, etc.)
             if msg.document or msg.audio or msg.video:
