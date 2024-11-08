@@ -194,8 +194,9 @@ async def rename(client, message):
 
     # Using `ubot` to iterate through chat history in target chat
     async for msg in ubot.get_chat_history(target_chat_id):
-        if await is_cancel(msg, msg.text):
-            return
+        if await is_stop_loop(msg, msg.text or ""):
+            break  # Stop forwarding if /stop command is detected
+
         try:
             # Check if message has any file type (document, audio, video, etc.)
             if msg.document or msg.audio or msg.video:
@@ -214,6 +215,14 @@ async def rename(client, message):
     await ubot.stop()
     print("Finished forwarding and deleting all files.")
 
+async def is_stop_loop(msg: Message, text: str):
+    """
+    Checks if the stop command is issued to cancel the process.
+    """
+    if text and text.strip() == "/stop":
+        await msg.reply("⛔ Forwarding process has been stopped.")
+        return True
+    return False
 
 async def is_cancel(msg: Message, text: str):
     if text.startswith("/cancel"):
